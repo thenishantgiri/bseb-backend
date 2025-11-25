@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AuditLogService } from '../common/audit-log.service';
 import { SessionService } from '../common/session.service';
+import { TwilioService } from '../common/twilio.service';
+import { EmailService } from '../common/email.service';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyBsebCredentialsDto, LinkBsebAccountDto } from './dto/verify-bseb.dto';
 
@@ -16,6 +18,8 @@ export class AuthService {
     private redis: RedisService,
     private auditLog: AuditLogService,
     private sessionService: SessionService,
+    private twilioService: TwilioService,
+    private emailService: EmailService,
   ) {}
 
   // Helper method to determine if identifier is email or phone
@@ -45,11 +49,21 @@ export class AuthService {
     // Store OTP in Redis with 5-minute expiration
     await this.redis.set(`otp:${identifier}`, otp, 300);
 
-    // TODO: Send OTP via SMS/Email gateway
+    // Send OTP via appropriate channel
+    let otpSent = false;
     if (this.isEmail(identifier)) {
-      console.log(`OTP for email ${identifier}: ${otp}`); // Development only - Replace with email service
+      // Send OTP via Email using SendGrid
+      otpSent = await this.emailService.sendOtpEmail(identifier, otp);
+      if (!otpSent) {
+        throw new BadRequestException('Failed to send OTP email. Please try again.');
+      }
     } else {
-      console.log(`OTP for phone ${identifier}: ${otp}`); // Development only - Replace with SMS service
+      // Send OTP via SMS using Twilio
+      const smsMessage = `Your BSEB Connect login OTP is: ${otp}. Valid for 5 minutes. Do not share this OTP with anyone.`;
+      otpSent = await this.twilioService.sendSMS(identifier, smsMessage);
+      if (!otpSent) {
+        throw new BadRequestException('Failed to send OTP SMS. Please try again.');
+      }
     }
 
     return { status: 1, message: 'OTP sent successfully' };

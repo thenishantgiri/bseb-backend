@@ -10,6 +10,7 @@ import { FileValidationService } from '../common/file-validation.service';
 import { AuditLogService } from '../common/audit-log.service';
 import { SessionService } from '../common/session.service';
 import { TwilioService } from '../common/twilio.service';
+import { EmailService } from '../common/email.service';
 import { RedisService } from '../redis/redis.service';
 
 @Module({
@@ -31,6 +32,7 @@ import { RedisService } from '../redis/redis.service';
     AuditLogService,
     SessionService,
     TwilioService,
+    EmailService,
     RedisService,
   ],
   controllers: [AuthController],
