@@ -1,0 +1,40 @@
+BSEB Connect RDS PostgreSQL Details
+=====================================
+Created: 2025-11-25
+Region: ap-south-1 (Mumbai)
+
+Database Connection Information:
+---------------------------------
+Endpoint: bseb-connect-db.cdsuqos2ot35.ap-south-1.rds.amazonaws.com
+Port: 5432
+Database Name: bseb_connect
+Master Username: bsebadmin
+Master Password: BSEBConnect2024
+
+Connection String:
+------------------
+postgresql://bsebadmin:BSEBConnect2024@bseb-connect-db.cdsuqos2ot35.ap-south-1.rds.amazonaws.com:5432/bseb_connect
+
+Environment Variable:
+--------------------
+DATABASE_URL="postgresql://bsebadmin:BSEBConnect2024@bseb-connect-db.cdsuqos2ot35.ap-south-1.rds.amazonaws.com:5432/bseb_connect"
+
+Test Connection Command:
+------------------------
+PGPASSWORD='BSEBConnect2024' psql -h bseb-connect-db.cdsuqos2ot35.ap-south-1.rds.amazonaws.com -U bsebadmin -d bseb_connect
+
+RDS Instance Details:
+--------------------
+Instance ID: bseb-connect-db
+Instance Class: db.t3.micro
+Engine: PostgreSQL 15
+Storage: 20 GB (gp3)
+Security Group: sg-0b14b87c52773b3ca
+Publicly Accessible: Yes
+
+Important Notes:
+---------------
+1. This RDS instance is configured to accept connections from EC2 security group sg-0ca3d0ee678ee59a4
+2. The instance is also publicly accessible (for development - restrict in production)
+3. Automatic backups are enabled with 7-day retention
+4. Remember to update passwords and restrict access for production use

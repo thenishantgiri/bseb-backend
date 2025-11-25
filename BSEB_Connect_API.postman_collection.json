@@ -1,0 +1,329 @@
+{
+  "info": {
+    "name": "BSEB Connect API - Complete Test Suite",
+    "_postman_id": "bseb-connect-2024",
+    "description": "Complete API testing collection for BSEB Connect Backend with all new features",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "1.1 Send OTP - Phone",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"9876543210\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/login/otp", "host": ["{{base_url}}"], "path": ["auth", "login", "otp"]},
+            "description": "Send OTP to phone number. Check console for OTP."
+          }
+        },
+        {
+          "name": "1.2 Send OTP - Email (NEW)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"test@example.com\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/login/otp", "host": ["{{base_url}}"], "path": ["auth", "login", "otp"]},
+            "description": "Send OTP to email. Check console for OTP."
+          }
+        },
+        {
+          "name": "1.3 Verify OTP Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Login successful', function() {", "  pm.response.to.have.status(200 || 201);", "  var jsonData = pm.response.json();", "  pm.expect(jsonData.status).to.eql(1);", "  pm.expect(jsonData.data).to.have.property('token');", "  pm.environment.set('auth_token', jsonData.data.token);", "});"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"9876543210\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/login/verify", "host": ["{{base_url}}"], "path": ["auth", "login", "verify"]},
+            "description": "Verify OTP. Auto-saves JWT token to environment variable."
+          }
+        },
+        {
+          "name": "1.4 Login with Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Login successful', function() {", "  pm.response.to.have.status(200 || 201);", "  var jsonData = pm.response.json();", "  pm.expect(jsonData.status).to.eql(1);", "  pm.environment.set('auth_token', jsonData.data.token);", "});"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"9876543210\",\n  \"password\": \"Password@123\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/login/password", "host": ["{{base_url}}"], "path": ["auth", "login", "password"]},
+            "description": "Login with phone/email and password"
+          }
+        },
+        {
+          "name": "1.5 Test Login Lockout (NEW)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"9876543210\",\n  \"otp\": \"000000\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/login/verify", "host": ["{{base_url}}"], "path": ["auth", "login", "verify"]},
+            "description": "Try wrong OTP 5 times to trigger 15-minute lockout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Registration",
+      "item": [
+        {
+          "name": "2.1 Register New User (Path B)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"Password@123\",\n  \"fullName\": \"Test User\",\n  \"dob\": \"2005-01-01\",\n  \"gender\": \"Male\",\n  \"class\": \"12\",\n  \"schoolName\": \"Test High School\",\n  \"state\": \"Bihar\",\n  \"district\": \"Patna\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"]},
+            "description": "Register without BSEB credentials (new students)"
+          }
+        },
+        {
+          "name": "2.2 Verify BSEB Credentials (NEW)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rollNumber\": \"TEST123\",\n  \"dob\": \"2005-01-01\",\n  \"rollCode\": \"ROLL001\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/verify-bseb-credentials", "host": ["{{base_url}}"], "path": ["auth", "verify-bseb-credentials"]},
+            "description": "Verify existing BSEB student credentials. Returns pre-filled data."
+          }
+        },
+        {
+          "name": "2.3 Register with BSEB Link (NEW)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rollNumber\": \"TEST123\",\n  \"dob\": \"2005-01-01\",\n  \"rollCode\": \"ROLL001\",\n  \"phone\": \"9123456789\",\n  \"email\": \"bseb.student@example.com\",\n  \"password\": \"SecurePass@123\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/register/bseb-linked", "host": ["{{base_url}}"], "path": ["auth", "register", "bseb-linked"]},
+            "description": "Register with verified BSEB credentials (auto-fetches data)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Password Management",
+      "item": [
+        {
+          "name": "3.1 Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"9876543210\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/password/forgot", "host": ["{{base_url}}"], "path": ["auth", "password", "forgot"]},
+            "description": "Request password reset OTP (expires in 30 minutes)"
+          }
+        },
+        {
+          "name": "3.2 Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"9876543210\",\n  \"otp\": \"123456\",\n  \"newPassword\": \"NewPassword@456\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/auth/password/reset", "host": ["{{base_url}}"], "path": ["auth", "password", "reset"]},
+            "description": "Reset password with OTP"
+          }
+        },
+        {
+          "name": "3.3 Change Password - Logged In (NEW)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{auth_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Password@123\",\n  \"newPassword\": \"NewPassword@456\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/profile/change-password", "host": ["{{base_url}}"], "path": ["profile", "change-password"]},
+            "description": "Change password while logged in. Requires JWT token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Profile Management",
+      "item": [
+        {
+          "name": "4.1 Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{auth_token}}"}],
+            "url": {"raw": "{{base_url}}/profile", "host": ["{{base_url}}"], "path": ["profile"]},
+            "description": "Get current user profile. Requires JWT token."
+          }
+        },
+        {
+          "name": "4.2 Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{auth_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Updated Name\",\n  \"address\": \"New Address\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/profile", "host": ["{{base_url}}"], "path": ["profile"]},
+            "description": "Update profile information"
+          }
+        },
+        {
+          "name": "4.3 Upgrade Class",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{auth_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newClass\": \"12\",\n  \"newStream\": \"Science\",\n  \"newRollNumber\": \"NEW123\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/profile/upgrade-class", "host": ["{{base_url}}"], "path": ["profile", "upgrade-class"]},
+            "description": "Upgrade to next class"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Session Management (NEW)",
+      "item": [
+        {
+          "name": "5.1 View Active Sessions",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{auth_token}}"}],
+            "url": {"raw": "{{base_url}}/profile/sessions", "host": ["{{base_url}}"], "path": ["profile", "sessions"]},
+            "description": "View all active sessions/devices"
+          }
+        },
+        {
+          "name": "5.2 Revoke Specific Session",
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Authorization", "value": "Bearer {{auth_token}}"}],
+            "url": {"raw": "{{base_url}}/profile/sessions/:sessionId", "host": ["{{base_url}}"], "path": ["profile", "sessions", ":sessionId"], "variable": [{"key": "sessionId", "value": "uuid-here"}]},
+            "description": "Logout from a specific device"
+          }
+        },
+        {
+          "name": "5.3 Logout Other Devices",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{auth_token}}"}],
+            "url": {"raw": "{{base_url}}/profile/sessions/revoke-others", "host": ["{{base_url}}"], "path": ["profile", "sessions", "revoke-others"]},
+            "description": "Logout from all devices except current"
+          }
+        },
+        {
+          "name": "5.4 Logout All Devices",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{auth_token}}"}],
+            "url": {"raw": "{{base_url}}/profile/sessions/revoke-all", "host": ["{{base_url}}"], "path": ["profile", "sessions", "revoke-all"]},
+            "description": "Logout from ALL devices including current"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Testing Scenarios",
+      "item": [
+        {
+          "name": "Test: Email Login Flow",
+          "item": [
+            {
+              "name": "Step 1: Send OTP to Email",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/json"}],
+                "body": {"mode": "raw", "raw": "{\"identifier\": \"test@example.com\"}"},
+                "url": {"raw": "{{base_url}}/auth/login/otp", "host": ["{{base_url}}"], "path": ["auth", "login", "otp"]}
+              }
+            },
+            {
+              "name": "Step 2: Verify Email OTP",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/json"}],
+                "body": {"mode": "raw", "raw": "{\"identifier\": \"test@example.com\", \"otp\": \"CHECK_CONSOLE\"}"},
+                "url": {"raw": "{{base_url}}/auth/login/verify", "host": ["{{base_url}}"], "path": ["auth", "login", "verify"]}
+              }
+            }
+          ]
+        },
+        {
+          "name": "Test: BSEB Registration Flow",
+          "item": [
+            {
+              "name": "Step 1: Verify BSEB Credentials",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/json"}],
+                "body": {"mode": "raw", "raw": "{\"rollNumber\": \"TEST123\", \"dob\": \"2005-01-01\"}"},
+                "url": {"raw": "{{base_url}}/auth/verify-bseb-credentials", "host": ["{{base_url}}"], "path": ["auth", "verify-bseb-credentials"]}
+              }
+            },
+            {
+              "name": "Step 2: Register with Verified Data",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/json"}],
+                "body": {"mode": "raw", "raw": "{\"rollNumber\": \"TEST123\", \"dob\": \"2005-01-01\", \"phone\": \"9000000001\", \"email\": \"bseb1@test.com\", \"password\": \"Test@1234\"}"},
+                "url": {"raw": "{{base_url}}/auth/register/bseb-linked", "host": ["{{base_url}}"], "path": ["auth", "register", "bseb-linked"]}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "base_url", "value": "http://localhost:3000", "type": "string"},
+    {"key": "auth_token", "value": "", "type": "string"}
+  ]
+}

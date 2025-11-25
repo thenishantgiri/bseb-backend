@@ -1,0 +1,15 @@
+BSEB Production Server
+======================
+Date: Tue Nov 25 15:25:51 +0545 2025
+Instance ID: i-02505c794e6647be8
+Public IP: 3.109.155.27
+Key File: bseb-key-1764063616.pem
+Region: ap-south-1
+
+SSH Command:
+ssh -i bseb-key-1764063616.pem ubuntu@3.109.155.27
+
+Next Steps:
+1. SSH into server
+2. Install Node.js, PostgreSQL, Redis
+3. Upload and configure backend

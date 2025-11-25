@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Student {
+  id        Int      @id @default(autoincrement())
+  phone     String   @unique
+  email     String?  @unique
+  password  String
+  fullName  String
+  dob       String?
+  gender    String?
+
+  fatherName String?
+  motherName String?
+
+  // Academic Info
+  rollNumber        String?
+  rollCode          String?
+  registrationNumber String?
+  schoolName        String?
+  udiseCode         String?
+  stream            String?
+  class             String?
+
+  // Address Info
+  address   String?
+  block     String?
+  district  String?
+  state     String?
+  pincode   String?
+
+  // Personal Info
+  caste             String?
+  religion          String?
+  differentlyAbled  String?
+  maritalStatus     String?
+  area              String?
+  aadhaarNumber     String?
+
+  // Images
+  photoUrl      String?
+  signatureUrl  String?
+
+  // Relations
+  sessions   Session[]
+  auditLogs  AuditLog[]
+
+  // Meta
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// SRS Requirement: Session Management
+model Session {
+  id          String   @id @default(uuid())
+  studentId   Int
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  token       String   @unique
+  deviceInfo  String?
+  ipAddress   String?
+  userAgent   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  lastUsedAt  DateTime @default(now())
+}
+
+// SRS Requirement: Audit Logging
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  studentId  Int?
+  student    Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  action     String   // e.g., 'LOGIN_SUCCESS', 'LOGIN_FAILED', 'PASSWORD_RESET', 'PROFILE_UPDATE'
+  identifier String?  // Phone or Email used
+  ipAddress  String?
+  userAgent  String?
+  metadata   String?  // JSON string for additional data
+  createdAt  DateTime @default(now())
+}

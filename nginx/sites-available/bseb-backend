@@ -1,0 +1,86 @@
+# BSEB Backend Nginx Site Configuration
+# This file should be symlinked to /etc/nginx/sites-enabled/
+
+# Upstream NestJS application
+upstream bseb_backend {
+    server 127.0.0.1:3000 max_fails=3 fail_timeout=30s;
+    keepalive 32;
+}
+
+# Rate limiting
+limit_req_zone $binary_remote_addr zone=bseb_api:10m rate=100r/s;
+limit_req_zone $binary_remote_addr zone=bseb_auth:10m rate=5r/s;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name bseb-backend.mvpl.info;
+
+    # Logs
+    access_log /var/log/nginx/bseb-backend.access.log;
+    error_log /var/log/nginx/bseb-backend.error.log;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # CORS for Flutter app
+    add_header Access-Control-Allow-Origin "*" always;
+    add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH" always;
+    add_header Access-Control-Allow-Headers "Origin, Content-Type, Accept, Authorization, x-refresh-token" always;
+    add_header Access-Control-Expose-Headers "x-access-token, x-refresh-token" always;
+
+    # Handle OPTIONS
+    if ($request_method = OPTIONS) {
+        return 204;
+    }
+
+    # Client body size for file uploads
+    client_max_body_size 50M;
+
+    # Main API proxy
+    location / {
+        limit_req zone=bseb_api burst=50 nodelay;
+
+        proxy_pass http://bseb_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Auth endpoints with stricter limits
+    location ~ ^/api/auth/ {
+        limit_req zone=bseb_auth burst=10 nodelay;
+
+        proxy_pass http://bseb_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # WebSocket support
+    location /socket.io/ {
+        proxy_pass http://bseb_backend/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # Health check
+    location /health {
+        proxy_pass http://bseb_backend/health;
+        access_log off;
+    }
+}

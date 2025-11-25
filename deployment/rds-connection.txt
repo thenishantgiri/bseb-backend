@@ -1,0 +1,13 @@
+RDS Connection Details
+======================
+Endpoint: 
+Database: bseb_connect
+Username: bsebadmin
+Password: BSEBConnect@2024
+Port: 5432
+
+Connection String:
+postgresql://bsebadmin:BSEBConnect@2024@:5432/bseb_connect
+
+Environment Variable:
+DATABASE_URL="postgresql://bsebadmin:BSEBConnect@2024@:5432/bseb_connect"
