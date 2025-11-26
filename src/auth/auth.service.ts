@@ -160,14 +160,105 @@ export class AuthService {
     };
   }
 
+  // Send OTP for registration verification
+  async sendRegistrationOtp(identifier: string) {
+    // Check if identifier is email or phone
+    const isEmailId = this.isEmail(identifier);
+
+    // Check if identifier is already registered
+    const existingUser = await this.findUserByIdentifier(identifier);
+    if (existingUser) {
+      throw new ConflictException(
+        isEmailId ? 'Email already registered' : 'Phone number already registered'
+      );
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store OTP in Redis with 10-minute expiration for registration
+    await this.redis.set(`register_otp:${identifier}`, otp, 600);
+
+    // Send OTP via appropriate channel
+    let otpSent = false;
+    if (isEmailId) {
+      // Send OTP via Email using SendGrid
+      otpSent = await this.emailService.sendOtpEmail(identifier, otp);
+      if (!otpSent) {
+        throw new BadRequestException('Failed to send OTP email. Please try again.');
+      }
+    } else {
+      // Send OTP via SMS using Twilio
+      const smsMessage = `Your BSEB Connect registration OTP is: ${otp}. Valid for 10 minutes. Do not share this OTP with anyone.`;
+      otpSent = await this.twilioService.sendSMS(identifier, smsMessage);
+      if (!otpSent) {
+        throw new BadRequestException('Failed to send OTP SMS. Please try again.');
+      }
+    }
+
+    return {
+      status: 1,
+      message: 'OTP sent successfully',
+      channel: isEmailId ? 'email' : 'sms',
+    };
+  }
+
+  // Verify OTP for registration
+  async verifyRegistrationOtp(identifier: string, otp: string) {
+    const storedOtp = await this.redis.get(`register_otp:${identifier}`);
+
+    if (!storedOtp) {
+      throw new UnauthorizedException('OTP expired or invalid');
+    }
+
+    if (storedOtp !== otp) {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    // OTP verified - mark identifier as verified for 30 minutes (time to complete registration)
+    await this.redis.set(`verified:${identifier}`, 'true', 1800);
+
+    // Delete the OTP
+    await this.redis.delete(`register_otp:${identifier}`);
+
+    return {
+      status: 1,
+      message: 'OTP verified successfully. You can now complete registration.',
+      verified: true,
+    };
+  }
+
   async register(registerDto: RegisterDto, photoPath?: string, signaturePath?: string) {
+    // Check if email/phone is verified
+    const emailVerified = registerDto.email
+      ? await this.redis.get(`verified:${registerDto.email}`)
+      : null;
+    const phoneVerified = await this.redis.get(`verified:${registerDto.phone}`);
+
+    // Require at least one verified identifier
+    if (!emailVerified && !phoneVerified) {
+      throw new BadRequestException(
+        'Please verify your email or phone number before registration. Send OTP first.'
+      );
+    }
+
     // Check if user already exists
-    const existing = await this.prisma.student.findUnique({ 
-      where: { phone: registerDto.phone } 
+    const existing = await this.prisma.student.findUnique({
+      where: { phone: registerDto.phone }
     });
-    
+
     if (existing) {
       throw new ConflictException('Phone number already registered');
+    }
+
+    // Check email uniqueness if provided
+    if (registerDto.email) {
+      const existingEmail = await this.prisma.student.findUnique({
+        where: { email: registerDto.email }
+      });
+      if (existingEmail) {
+        throw new ConflictException('Email already registered');
+      }
     }
 
     // Hash password

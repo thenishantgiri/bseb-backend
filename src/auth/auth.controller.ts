@@ -35,6 +35,19 @@ export class AuthController {
     return this.authService.loginWithPassword(dto.identifier, dto.password);
   }
 
+  // Send OTP for registration (email or phone verification)
+  @Throttle({ long: {limit: 5, ttl: 3600000} })  // 5 requests per hour
+  @Post('register/send-otp')
+  async sendRegistrationOtp(@Body() dto: SendOtpDto) {
+    return this.authService.sendRegistrationOtp(dto.identifier);
+  }
+
+  // Verify OTP for registration
+  @Post('register/verify-otp')
+  async verifyRegistrationOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyRegistrationOtp(dto.identifier, dto.otp);
+  }
+
   @Post('register')
   @UseInterceptors(
     FileFieldsInterceptor([
