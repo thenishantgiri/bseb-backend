@@ -194,29 +194,13 @@ export class AuthController {
       const result = await this.twilioService.verifyOTP(identifier, otp);
 
       if (!result.success) {
-        // If email, try existing email OTP verification as fallback
-        if (isEmail) {
-          return this.authService.verifyLoginOtp(identifier, otp);
-        }
-        throw new UnauthorizedException(result.message || 'Invalid or expired OTP');
-      }
-
-      // Find or create user
-      // For mobile: Create/find user by phone
-      // For email: Use existing auth service
-      if (isMobile) {
-        // TODO: Implement phone-based user lookup/creation
-        // For now, return success with a note to implement user creation
-        return {
-          success: true,
-          message: 'OTP verified successfully',
-          identifier: identifier,
-          // TODO: Generate JWT tokens here after implementing user lookup
-        };
-      } else {
-        // For email, use existing auth service
+        // Fallback to Redis-based OTP verification (works for both phone and email)
         return this.authService.verifyLoginOtp(identifier, otp);
       }
+
+      // Twilio verification succeeded - now authenticate user via auth service
+      // This will find the user, generate JWT, and create session
+      return this.authService.verifyLoginOtpAfterTwilio(identifier);
     } else {
       throw new BadRequestException('Invalid identifier');
     }

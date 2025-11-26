@@ -145,6 +145,45 @@ export class AuthService {
     };
   }
 
+  /**
+   * Complete login after Twilio OTP verification
+   * Called when Twilio Verify has already validated the OTP
+   */
+  async verifyLoginOtpAfterTwilio(identifier: string, ipAddress?: string, userAgent?: string) {
+    // Normalize identifier for consistency
+    const normalizedIdentifier = this.isEmail(identifier) ? identifier : this.normalizePhone(identifier);
+
+    // Clear failed attempts on successful OTP verification
+    await this.clearFailedAttempts(normalizedIdentifier);
+
+    // Find user
+    const user = await this.findUserByIdentifier(identifier);
+    if (!user) {
+      throw new UnauthorizedException('User not registered. Please register first.');
+    }
+
+    // Generate JWT
+    const token = this.generateToken(user.id, user.phone, user.email || undefined);
+
+    // Create session
+    await this.sessionService.createSession(user.id, token, undefined, ipAddress, userAgent);
+
+    // Log successful login
+    await this.auditLog.logAuthEvent('OTP_LOGIN_SUCCESS', identifier, user.id, ipAddress, userAgent, { method: 'twilio_verify' });
+
+    // Remove password from response
+    const { password, ...userWithoutPassword } = user;
+
+    return {
+      status: 1,
+      message: 'Login successful',
+      data: {
+        token,
+        user: userWithoutPassword,
+      },
+    };
+  }
+
   async loginWithPassword(identifier: string, password: string, ipAddress?: string, userAgent?: string) {
     // Check if account is locked
     await this.checkAccountLockout(identifier, 'password');
