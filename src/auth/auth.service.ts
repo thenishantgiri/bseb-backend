@@ -27,16 +27,40 @@ export class AuthService {
     return identifier.includes('@');
   }
 
+  // Helper method to normalize phone number to E.164 format
+  private normalizePhone(phone: string): string {
+    // Remove any non-numeric characters
+    const cleaned = phone.replace(/\D/g, '');
+
+    // If it's 10 digits and starts with 6-9, it's an Indian number
+    if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
+      return `+91${cleaned}`;
+    }
+
+    // If it already has country code (12 digits starting with 91)
+    if (cleaned.length === 12 && cleaned.startsWith('91')) {
+      return `+${cleaned}`;
+    }
+
+    // Return as is with + prefix if not already present
+    return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;
+  }
+
   // Helper method to find user by phone or email
   private async findUserByIdentifier(identifier: string) {
     if (this.isEmail(identifier)) {
       return await this.prisma.student.findUnique({ where: { email: identifier } });
     } else {
-      return await this.prisma.student.findUnique({ where: { phone: identifier } });
+      // Normalize phone number before querying database
+      const normalizedPhone = this.normalizePhone(identifier);
+      return await this.prisma.student.findUnique({ where: { phone: normalizedPhone } });
     }
   }
 
   async sendOtpLogin(identifier: string) {
+    // Normalize identifier for consistency
+    const normalizedIdentifier = this.isEmail(identifier) ? identifier : this.normalizePhone(identifier);
+
     // Check if user exists
     const user = await this.findUserByIdentifier(identifier);
     if (!user) {
@@ -46,8 +70,8 @@ export class AuthService {
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store OTP in Redis with 5-minute expiration
-    await this.redis.set(`otp:${identifier}`, otp, 300);
+    // Store OTP in Redis with normalized identifier as key
+    await this.redis.set(`otp:${normalizedIdentifier}`, otp, 300);
 
     // Send OTP via appropriate channel
     let otpSent = false;
@@ -58,9 +82,9 @@ export class AuthService {
         throw new BadRequestException('Failed to send OTP email. Please try again.');
       }
     } else {
-      // Send OTP via SMS using Twilio
+      // Send OTP via SMS using Twilio (use normalized phone)
       const smsMessage = `Your BSEB Connect login OTP is: ${otp}. Valid for 5 minutes. Do not share this OTP with anyone.`;
-      otpSent = await this.twilioService.sendSMS(identifier, smsMessage);
+      otpSent = await this.twilioService.sendSMS(normalizedIdentifier, smsMessage);
       if (!otpSent) {
         throw new BadRequestException('Failed to send OTP SMS. Please try again.');
       }
@@ -70,25 +94,28 @@ export class AuthService {
   }
 
   async verifyLoginOtp(identifier: string, otp: string, ipAddress?: string, userAgent?: string) {
-    const storedOtp = await this.redis.get(`otp:${identifier}`);
+    // Normalize identifier for consistency with sendOtpLogin
+    const normalizedIdentifier = this.isEmail(identifier) ? identifier : this.normalizePhone(identifier);
+
+    const storedOtp = await this.redis.get(`otp:${normalizedIdentifier}`);
 
     if (!storedOtp) {
-      await this.auditLog.logAuthEvent('OTP_LOGIN_FAILED', identifier, undefined, ipAddress, userAgent, { reason: 'OTP expired' });
+      await this.auditLog.logAuthEvent('OTP_LOGIN_FAILED', normalizedIdentifier, undefined, ipAddress, userAgent, { reason: 'OTP expired' });
       throw new UnauthorizedException('OTP expired or invalid');
     }
 
     if (storedOtp !== otp) {
       // Track failed OTP attempts
-      await this.trackFailedAttempt(identifier, 'otp');
-      await this.auditLog.logAuthEvent('OTP_LOGIN_FAILED', identifier, undefined, ipAddress, userAgent, { reason: 'Invalid OTP' });
+      await this.trackFailedAttempt(normalizedIdentifier, 'otp');
+      await this.auditLog.logAuthEvent('OTP_LOGIN_FAILED', normalizedIdentifier, undefined, ipAddress, userAgent, { reason: 'Invalid OTP' });
       throw new UnauthorizedException('Invalid OTP');
     }
 
     // OTP verified, delete it
-    await this.redis.delete(`otp:${identifier}`);
+    await this.redis.delete(`otp:${normalizedIdentifier}`);
 
     // Clear failed attempts on successful login
-    await this.clearFailedAttempts(identifier);
+    await this.clearFailedAttempts(normalizedIdentifier);
 
     // Find user
     const user = await this.findUserByIdentifier(identifier);
