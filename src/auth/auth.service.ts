@@ -57,6 +57,12 @@ export class AuthService {
     }
   }
 
+  // Public method to check if user exists (used by controller for pre-OTP validation)
+  async checkUserExists(identifier: string): Promise<boolean> {
+    const user = await this.findUserByIdentifier(identifier);
+    return user !== null;
+  }
+
   async sendOtpLogin(identifier: string) {
     // Normalize identifier for consistency
     const normalizedIdentifier = this.isEmail(identifier) ? identifier : this.normalizePhone(identifier);

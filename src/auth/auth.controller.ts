@@ -128,7 +128,8 @@ export class AuthController {
   // Twilio OTP Integration Endpoints
 
   /**
-   * Send OTP via Twilio Verify for login/registration
+   * Send OTP via Twilio Verify for login
+   * This endpoint checks if user is registered before sending OTP
    */
   @Post('send-otp')
   @Throttle({ long: {limit: 5, ttl: 3600000} })  // 5 requests per hour
@@ -145,6 +146,12 @@ export class AuthController {
         throw new BadRequestException('Invalid mobile number');
       }
 
+      // Check if user is registered before sending OTP (for login flow)
+      const userExists = await this.authService.checkUserExists(identifier);
+      if (!userExists) {
+        throw new BadRequestException('User not registered. Please register first.');
+      }
+
       // Send OTP via Twilio Verify
       const result = await this.twilioService.sendOTP(identifier, 'sms');
 
@@ -159,6 +166,12 @@ export class AuthController {
         channel: 'sms',
       };
     } else if (isEmail) {
+      // Check if user is registered before sending OTP (for login flow)
+      const userExists = await this.authService.checkUserExists(identifier);
+      if (!userExists) {
+        throw new BadRequestException('User not registered. Please register first.');
+      }
+
       // Send OTP via Twilio Verify to email
       const result = await this.twilioService.sendOTP(identifier, 'email');
 
