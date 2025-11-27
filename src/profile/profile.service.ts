@@ -70,18 +70,22 @@ export class ProfileService {
   }
 
   async uploadImage(userId: number, type: 'photo' | 'signature', filename: string) {
-    const updateData = type === 'photo' 
+    const updateData = type === 'photo'
       ? { photoUrl: filename }
       : { signatureUrl: filename };
 
-    await this.prisma.student.update({
+    const student = await this.prisma.student.update({
       where: { id: userId },
       data: updateData,
     });
 
+    // Return updated student with full URLs so UI can update immediately
+    const { password, ...studentWithoutPassword } = student;
+
     return {
       status: 1,
       message: `${type} uploaded successfully`,
+      data: this.transformStudentUrls(studentWithoutPassword),
     };
   }
 
