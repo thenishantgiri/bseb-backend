@@ -418,51 +418,138 @@ export class AuthService {
   }
 
   async forgotPassword(identifier: string) {
+    // Normalize identifier
+    const normalizedIdentifier = this.isEmail(identifier) ? identifier : this.normalizePhone(identifier);
+
+    // Check if user exists
     const user = await this.findUserByIdentifier(identifier);
     if (!user) {
-      throw new BadRequestException('User not found');
+      throw new BadRequestException('User not found. Please check your phone number or email.');
     }
 
-    // Generate OTP - SRS Requirement: 30 minutes expiry
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await this.redis.set(`reset:${identifier}`, otp, 1800); // 30 minutes = 1800 seconds
-
-    // TODO: Send OTP via SMS/Email gateway
+    // Send OTP via appropriate channel
     if (this.isEmail(identifier)) {
-      console.log(`Password Reset OTP for email ${identifier}: ${otp}`);
+      // Use SendGrid for email OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      await this.redis.set(`reset:${normalizedIdentifier}`, otp, 1800); // 30 minutes
+
+      const emailSent = await this.emailService.sendOtpEmail(identifier, otp);
+      if (!emailSent) {
+        throw new BadRequestException('Failed to send OTP email. Please try again.');
+      }
+
+      return {
+        status: 1,
+        message: 'OTP sent to your email address',
+        channel: 'email',
+        identifier: identifier.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Mask email
+      };
     } else {
-      console.log(`Password Reset OTP for phone ${identifier}: ${otp}`);
+      // Use Twilio Verify for SMS OTP
+      const result = await this.twilioService.sendOTP(normalizedIdentifier, 'sms');
+
+      if (!result.success) {
+        throw new BadRequestException(result.message || 'Failed to send OTP SMS. Please try again.');
+      }
+
+      return {
+        status: 1,
+        message: 'OTP sent to your mobile number',
+        channel: 'sms',
+        identifier: normalizedIdentifier.replace(/.(?=.{4})/g, '*'), // Mask phone
+      };
+    }
+  }
+
+  /**
+   * Verify forgot password OTP and reset password
+   * Supports both Twilio Verify (for SMS) and Redis-stored OTP (for email)
+   */
+  async verifyForgotPasswordOtp(identifier: string, otp: string) {
+    const normalizedIdentifier = this.isEmail(identifier) ? identifier : this.normalizePhone(identifier);
+
+    if (this.isEmail(identifier)) {
+      // Verify email OTP from Redis
+      const storedOtp = await this.redis.get(`reset:${normalizedIdentifier}`);
+
+      if (!storedOtp) {
+        throw new UnauthorizedException('OTP expired. Please request a new one.');
+      }
+
+      if (storedOtp !== otp) {
+        throw new UnauthorizedException('Invalid OTP. Please check and try again.');
+      }
+
+      // Mark as verified but don't delete OTP yet (needed for reset step)
+      await this.redis.set(`reset_verified:${normalizedIdentifier}`, 'true', 600); // 10 minutes to complete reset
+    } else {
+      // Verify SMS OTP via Twilio Verify
+      const result = await this.twilioService.verifyOTP(normalizedIdentifier, otp);
+
+      if (!result.success) {
+        throw new UnauthorizedException(result.message || 'Invalid OTP. Please check and try again.');
+      }
+
+      // Mark as verified for reset step
+      await this.redis.set(`reset_verified:${normalizedIdentifier}`, 'true', 600); // 10 minutes to complete reset
     }
 
-    return { status: 1, message: 'OTP sent successfully' };
+    return {
+      status: 1,
+      message: 'OTP verified successfully. You can now reset your password.',
+      verified: true,
+    };
   }
 
   async resetPassword(identifier: string, otp: string, newPassword: string) {
-    const storedOtp = await this.redis.get(`reset:${identifier}`);
+    const normalizedIdentifier = this.isEmail(identifier) ? identifier : this.normalizePhone(identifier);
 
-    if (!storedOtp) {
-      throw new UnauthorizedException('OTP expired or invalid');
+    // Check if OTP was verified (two-step flow) or verify it now (single-step flow)
+    const isVerified = await this.redis.get(`reset_verified:${normalizedIdentifier}`);
+
+    if (!isVerified) {
+      // Single-step flow: verify OTP now
+      if (this.isEmail(identifier)) {
+        const storedOtp = await this.redis.get(`reset:${normalizedIdentifier}`);
+
+        if (!storedOtp) {
+          throw new UnauthorizedException('OTP expired. Please request a new one.');
+        }
+
+        if (storedOtp !== otp) {
+          throw new UnauthorizedException('Invalid OTP. Please check and try again.');
+        }
+      } else {
+        // For phone, verify via Twilio
+        const result = await this.twilioService.verifyOTP(normalizedIdentifier, otp);
+
+        if (!result.success) {
+          throw new UnauthorizedException(result.message || 'Invalid OTP. Please check and try again.');
+        }
+      }
     }
 
-    if (storedOtp !== otp) {
-      throw new UnauthorizedException('Invalid OTP');
-    }
+    // Clean up verification tokens
+    await this.redis.delete(`reset:${normalizedIdentifier}`);
+    await this.redis.delete(`reset_verified:${normalizedIdentifier}`);
 
-    await this.redis.delete(`reset:${identifier}`);
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
+    // Find user and update password
     const user = await this.findUserByIdentifier(identifier);
     if (!user) {
       throw new BadRequestException('User not found');
     }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     await this.prisma.student.update({
       where: { id: user.id },
       data: { password: hashedPassword },
     });
 
-    return {status: 1, message: 'Password reset successful' };
+    return {
+      status: 1,
+      message: 'Password reset successful. You can now login with your new password.',
+    };
   }
 
   // SRS Requirement: Track failed login attempts

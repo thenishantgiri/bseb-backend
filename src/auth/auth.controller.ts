@@ -84,6 +84,17 @@ export class AuthController {
     return this.authService.forgotPassword(dto.identifier);
   }
 
+  /**
+   * Verify OTP for forgot password (two-step flow)
+   * Step 1: forgotPassword sends OTP
+   * Step 2: verifyForgotPasswordOtp verifies OTP
+   * Step 3: resetPassword sets new password
+   */
+  @Post('password/verify-otp')
+  async verifyForgotPasswordOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyForgotPasswordOtp(dto.identifier, dto.otp);
+  }
+
   @Post('password/reset')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.identifier, dto.otp, dto.newPassword);
