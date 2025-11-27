@@ -12,6 +12,10 @@ import { VerifyBsebCredentialsDto, LinkBsebAccountDto } from './dto/verify-bseb.
 
 @Injectable()
 export class AuthService {
+  private readonly useS3 = process.env.USE_S3 === 'true';
+  private readonly bucketName = process.env.AWS_S3_BUCKET || 'bseb-connect-uploads';
+  private readonly region = process.env.AWS_REGION || 'ap-south-1';
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -21,6 +25,27 @@ export class AuthService {
     private twilioService: TwilioService,
     private emailService: EmailService,
   ) {}
+
+  // Convert relative path to full S3 URL
+  private getFullUrl(relativePath: string | null): string | null {
+    if (!relativePath) return null;
+    if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
+      return relativePath;
+    }
+    if (this.useS3) {
+      return `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${relativePath}`;
+    }
+    return relativePath;
+  }
+
+  // Transform student object to include full URLs
+  private transformStudentUrls(student: any): any {
+    return {
+      ...student,
+      photoUrl: this.getFullUrl(student.photoUrl),
+      signatureUrl: this.getFullUrl(student.signatureUrl),
+    };
+  }
 
   // Helper method to determine if identifier is email or phone
   private isEmail(identifier: string): boolean {
@@ -146,7 +171,7 @@ export class AuthService {
       message: 'Login successful',
       data: {
         token,
-        user: userWithoutPassword,
+        user: this.transformStudentUrls(userWithoutPassword),
       },
     };
   }
@@ -185,7 +210,7 @@ export class AuthService {
       message: 'Login successful',
       data: {
         token,
-        user: userWithoutPassword,
+        user: this.transformStudentUrls(userWithoutPassword),
       },
     };
   }
@@ -227,7 +252,7 @@ export class AuthService {
       message: 'Login successful',
       data: {
         token,
-        user: userWithoutPassword,
+        user: this.transformStudentUrls(userWithoutPassword),
       },
     };
   }

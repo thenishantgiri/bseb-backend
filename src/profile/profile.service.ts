@@ -6,7 +6,35 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class ProfileService {
+  private readonly useS3 = process.env.USE_S3 === 'true';
+  private readonly bucketName = process.env.AWS_S3_BUCKET || 'bseb-connect-uploads';
+  private readonly region = process.env.AWS_REGION || 'ap-south-1';
+
   constructor(private prisma: PrismaService) {}
+
+  // Convert relative path to full S3 URL
+  private getFullUrl(relativePath: string | null): string | null {
+    if (!relativePath) return null;
+    // If already a full URL, return as is
+    if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
+      return relativePath;
+    }
+    // Convert relative path to full S3 URL
+    if (this.useS3) {
+      return `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${relativePath}`;
+    }
+    // For local development, return relative path (or MinIO URL if configured)
+    return relativePath;
+  }
+
+  // Transform student object to include full URLs
+  private transformStudentUrls(student: any): any {
+    return {
+      ...student,
+      photoUrl: this.getFullUrl(student.photoUrl),
+      signatureUrl: this.getFullUrl(student.signatureUrl),
+    };
+  }
 
   async getProfile(userId: number) {
     const student = await this.prisma.student.findUnique({
@@ -22,7 +50,7 @@ export class ProfileService {
 
     return {
       status: 1,
-      data: studentWithoutPassword,
+      data: this.transformStudentUrls(studentWithoutPassword),
     };
   }
 
@@ -37,7 +65,7 @@ export class ProfileService {
     return {
       status: 1,
       message: 'Profile updated successfully',
-      data: studentWithoutPassword,
+      data: this.transformStudentUrls(studentWithoutPassword),
     };
   }
 
@@ -75,7 +103,7 @@ export class ProfileService {
     return {
       status: 1,
       message: 'Class upgraded successfully',
-      data: userWithoutPassword,
+      data: this.transformStudentUrls(userWithoutPassword),
     };
   }
 
