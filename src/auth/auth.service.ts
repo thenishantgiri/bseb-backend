@@ -273,33 +273,18 @@ export class AuthService {
       );
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Use Twilio Verify service to send OTP (same as login flow)
+    const channel = isEmailId ? 'email' : 'sms';
+    const result = await this.twilioService.sendOTP(normalizedIdentifier, channel);
 
-    // Store OTP in Redis with normalized identifier as key (10-minute expiration)
-    await this.redis.set(`register_otp:${normalizedIdentifier}`, otp, 600);
-
-    // Send OTP via appropriate channel
-    let otpSent = false;
-    if (isEmailId) {
-      // Send OTP via Email using SendGrid
-      otpSent = await this.emailService.sendOtpEmail(identifier, otp);
-      if (!otpSent) {
-        throw new BadRequestException('Failed to send OTP email. Please try again.');
-      }
-    } else {
-      // Send OTP via SMS using Twilio (use normalized phone)
-      const smsMessage = `Your BSEB Connect registration OTP is: ${otp}. Valid for 10 minutes. Do not share this OTP with anyone.`;
-      otpSent = await this.twilioService.sendSMS(normalizedIdentifier, smsMessage);
-      if (!otpSent) {
-        throw new BadRequestException('Failed to send OTP SMS. Please try again.');
-      }
+    if (!result.success) {
+      throw new BadRequestException(result.message || 'Failed to send OTP. Please try again.');
     }
 
     return {
       status: 1,
       message: 'OTP sent successfully',
-      channel: isEmailId ? 'email' : 'sms',
+      channel: channel,
     };
   }
 
@@ -309,21 +294,15 @@ export class AuthService {
     const isEmailId = this.isEmail(identifier);
     const normalizedIdentifier = isEmailId ? identifier : this.normalizePhone(identifier);
 
-    const storedOtp = await this.redis.get(`register_otp:${normalizedIdentifier}`);
+    // Use Twilio Verify service to verify OTP (same as login flow)
+    const result = await this.twilioService.verifyOTP(normalizedIdentifier, otp);
 
-    if (!storedOtp) {
-      throw new UnauthorizedException('OTP expired or invalid');
-    }
-
-    if (storedOtp !== otp) {
-      throw new UnauthorizedException('Invalid OTP');
+    if (!result.success) {
+      throw new UnauthorizedException(result.message || 'Invalid OTP');
     }
 
     // OTP verified - mark identifier as verified for 30 minutes (time to complete registration)
     await this.redis.set(`verified:${normalizedIdentifier}`, 'true', 1800);
-
-    // Delete the OTP
-    await this.redis.delete(`register_otp:${normalizedIdentifier}`);
 
     return {
       status: 1,
