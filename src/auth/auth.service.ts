@@ -262,6 +262,9 @@ export class AuthService {
     // Check if identifier is email or phone
     const isEmailId = this.isEmail(identifier);
 
+    // Normalize phone numbers for consistent storage and lookup
+    const normalizedIdentifier = isEmailId ? identifier : this.normalizePhone(identifier);
+
     // Check if identifier is already registered
     const existingUser = await this.findUserByIdentifier(identifier);
     if (existingUser) {
@@ -273,8 +276,8 @@ export class AuthService {
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store OTP in Redis with 10-minute expiration for registration
-    await this.redis.set(`register_otp:${identifier}`, otp, 600);
+    // Store OTP in Redis with normalized identifier as key (10-minute expiration)
+    await this.redis.set(`register_otp:${normalizedIdentifier}`, otp, 600);
 
     // Send OTP via appropriate channel
     let otpSent = false;
@@ -285,9 +288,9 @@ export class AuthService {
         throw new BadRequestException('Failed to send OTP email. Please try again.');
       }
     } else {
-      // Send OTP via SMS using Twilio
+      // Send OTP via SMS using Twilio (use normalized phone)
       const smsMessage = `Your BSEB Connect registration OTP is: ${otp}. Valid for 10 minutes. Do not share this OTP with anyone.`;
-      otpSent = await this.twilioService.sendSMS(identifier, smsMessage);
+      otpSent = await this.twilioService.sendSMS(normalizedIdentifier, smsMessage);
       if (!otpSent) {
         throw new BadRequestException('Failed to send OTP SMS. Please try again.');
       }
@@ -302,7 +305,11 @@ export class AuthService {
 
   // Verify OTP for registration
   async verifyRegistrationOtp(identifier: string, otp: string) {
-    const storedOtp = await this.redis.get(`register_otp:${identifier}`);
+    // Normalize phone numbers for consistent storage and lookup
+    const isEmailId = this.isEmail(identifier);
+    const normalizedIdentifier = isEmailId ? identifier : this.normalizePhone(identifier);
+
+    const storedOtp = await this.redis.get(`register_otp:${normalizedIdentifier}`);
 
     if (!storedOtp) {
       throw new UnauthorizedException('OTP expired or invalid');
@@ -313,10 +320,10 @@ export class AuthService {
     }
 
     // OTP verified - mark identifier as verified for 30 minutes (time to complete registration)
-    await this.redis.set(`verified:${identifier}`, 'true', 1800);
+    await this.redis.set(`verified:${normalizedIdentifier}`, 'true', 1800);
 
     // Delete the OTP
-    await this.redis.delete(`register_otp:${identifier}`);
+    await this.redis.delete(`register_otp:${normalizedIdentifier}`);
 
     return {
       status: 1,
@@ -326,11 +333,14 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto, photoPath?: string, signaturePath?: string) {
-    // Check if email/phone is verified
+    // Normalize phone for consistent lookup
+    const normalizedPhone = this.normalizePhone(registerDto.phone);
+
+    // Check if email/phone is verified (using normalized phone)
     const emailVerified = registerDto.email
       ? await this.redis.get(`verified:${registerDto.email}`)
       : null;
-    const phoneVerified = await this.redis.get(`verified:${registerDto.phone}`);
+    const phoneVerified = await this.redis.get(`verified:${normalizedPhone}`);
 
     // Require at least one verified identifier
     if (!emailVerified && !phoneVerified) {
@@ -339,9 +349,9 @@ export class AuthService {
       );
     }
 
-    // Check if user already exists
+    // Check if user already exists (using normalized phone)
     const existing = await this.prisma.student.findUnique({
-      where: { phone: registerDto.phone }
+      where: { phone: normalizedPhone }
     });
 
     if (existing) {
@@ -361,9 +371,9 @@ export class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
-    // Normalize field names (handle aliases)
+    // Normalize field names (handle aliases) - store normalized phone in database
     const normalizedData = {
-      phone: registerDto.phone,
+      phone: normalizedPhone,
       email: registerDto.email,
       password: hashedPassword,
       fullName: registerDto.fullName,
