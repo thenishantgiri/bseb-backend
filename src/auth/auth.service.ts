@@ -273,18 +273,28 @@ export class AuthService {
       );
     }
 
-    // Use Twilio Verify service to send OTP (same as login flow)
-    const channel = isEmailId ? 'email' : 'sms';
-    const result = await this.twilioService.sendOTP(normalizedIdentifier, channel);
+    // Use different OTP methods for email vs phone
+    if (isEmailId) {
+      // Use SendGrid for email OTP (Twilio Verify email channel is not enabled)
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      await this.redis.set(`register_otp:${normalizedIdentifier}`, otp, 600);
 
-    if (!result.success) {
-      throw new BadRequestException(result.message || 'Failed to send OTP. Please try again.');
+      const emailSent = await this.emailService.sendOtpEmail(identifier, otp);
+      if (!emailSent) {
+        throw new BadRequestException('Failed to send OTP email. Please try again.');
+      }
+    } else {
+      // Use Twilio Verify for SMS OTP
+      const result = await this.twilioService.sendOTP(normalizedIdentifier, 'sms');
+      if (!result.success) {
+        throw new BadRequestException(result.message || 'Failed to send OTP SMS. Please try again.');
+      }
     }
 
     return {
       status: 1,
       message: 'OTP sent successfully',
-      channel: channel,
+      channel: isEmailId ? 'email' : 'sms',
     };
   }
 
@@ -294,11 +304,28 @@ export class AuthService {
     const isEmailId = this.isEmail(identifier);
     const normalizedIdentifier = isEmailId ? identifier : this.normalizePhone(identifier);
 
-    // Use Twilio Verify service to verify OTP (same as login flow)
-    const result = await this.twilioService.verifyOTP(normalizedIdentifier, otp);
+    // Use different verification methods for email vs phone
+    if (isEmailId) {
+      // Verify email OTP from Redis (stored by SendGrid flow)
+      const storedOtp = await this.redis.get(`register_otp:${normalizedIdentifier}`);
 
-    if (!result.success) {
-      throw new UnauthorizedException(result.message || 'Invalid OTP');
+      if (!storedOtp) {
+        throw new UnauthorizedException('OTP expired or invalid');
+      }
+
+      if (storedOtp !== otp) {
+        throw new UnauthorizedException('Invalid OTP');
+      }
+
+      // Delete the OTP after successful verification
+      await this.redis.delete(`register_otp:${normalizedIdentifier}`);
+    } else {
+      // Verify SMS OTP via Twilio Verify
+      const result = await this.twilioService.verifyOTP(normalizedIdentifier, otp);
+
+      if (!result.success) {
+        throw new UnauthorizedException(result.message || 'Invalid OTP');
+      }
     }
 
     // OTP verified - mark identifier as verified for 30 minutes (time to complete registration)
