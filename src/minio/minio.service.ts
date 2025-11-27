@@ -46,9 +46,18 @@ export class MinioService implements OnModuleInit {
   async uploadFile(
     file: Express.Multer.File,
     folder: string,
+    subfolder?: string,
   ): Promise<string> {
-    const fileName = `${folder}/${Date.now()}-${file.originalname}`;
-    
+    // Determine file extension from mimetype
+    const ext = file.mimetype === 'image/png' ? 'png' : 'jpg';
+    const baseName = folder === 'photos' ? 'photo' : 'signature';
+
+    // New structure: {folder}/{subfolder}/{baseName}.{ext}
+    // Example: photos/123456789/photo.jpg or signatures/123456789/signature.jpg
+    const fileName = subfolder
+      ? `${folder}/${subfolder}/${baseName}.${ext}`
+      : `${folder}/${Date.now()}-${file.originalname}`;
+
     await this.minioClient.putObject(
       this.bucketName,
       fileName,

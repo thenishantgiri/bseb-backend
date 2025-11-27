@@ -4,6 +4,7 @@ import { ProfileService } from './profile.service';
 import { MinioService } from '../minio/minio.service';
 import { FileValidationService } from '../common/file-validation.service';
 import { SessionService } from '../common/session.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpgradeClassDto } from './dto/upgrade-class.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -18,6 +19,7 @@ export class ProfileController {
     private minioService: MinioService,
     private fileValidationService: FileValidationService,
     private sessionService: SessionService,
+    private prisma: PrismaService,
   ) {}
 
   @Get()
@@ -47,10 +49,17 @@ export class ProfileController {
       this.fileValidationService.validateSignature(file);
     }
 
-    // Upload to MinIO
+    // Get user's registration number for folder structure
+    const student = await this.prisma.student.findUnique({
+      where: { id: user.id },
+      select: { registrationNumber: true },
+    });
+
+    // Upload to S3/MinIO with folder structure: {type}/{registrationNumber}/{type}.jpg
     const folder = type === 'photo' ? 'photos' : 'signatures';
-    const fileName = await this.minioService.uploadFile(file, folder);
-    
+    const subfolder = student?.registrationNumber || `user_${user.id}`;
+    const fileName = await this.minioService.uploadFile(file, folder, subfolder);
+
     return this.profileService.uploadImage(user.id, type, fileName);
   }
 
