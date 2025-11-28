@@ -16,13 +16,11 @@ export const BsebApiConfig = {
 
   // ============================================
   // Admit Card APIs
+  // Uses same endpoint as form data - admit card info is part of the response
   // ============================================
   admitCard: {
-    baseUrl: 'http://115.243.18.52:8081/api/BsebInter',
-    endpoints: {
-      theory: 'GetAdmitCardTheory',
-      practical: 'GetAdmitCardPractical',
-    },
+    baseUrl: 'https://examapi.biharboardonline.org/export/app',
+    hash: 'a591a6d40bf420404a011733cfb7b190d62c6',
     cacheTtl: 3600, // 1 hour
     cachePrefix: 'bseb:admitcard',
   },

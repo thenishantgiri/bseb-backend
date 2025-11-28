@@ -46,12 +46,21 @@ export class AdmitCardService extends BsebBaseService {
 
   /**
    * Internal method to fetch admit card by type
+   * Uses same BSEB API endpoint as form data - admit card data is extracted from response
    */
   private async getAdmitCard(
     dto: GetAdmitCardRequestDto,
     type: AdmitCardType,
   ): Promise<AdmitCardResponseDto> {
-    const identifier = this.getIdentifier(dto);
+    // Registration number is required for this endpoint
+    if (!dto.registrationNumber) {
+      return {
+        success: false,
+        message: 'Registration number is required',
+      };
+    }
+
+    const identifier = dto.registrationNumber;
     const cacheKey = `${this.config.cachePrefix}:${type}:${identifier}`;
 
     try {
@@ -62,24 +71,23 @@ export class AdmitCardService extends BsebBaseService {
         return this.createSuccessResponse(cachedData, true);
       }
 
-      // Build URL and request body
-      const endpoint = type === AdmitCardType.THEORY
-        ? this.config.endpoints.theory
-        : this.config.endpoints.practical;
-      const url = `${this.config.baseUrl}/${endpoint}`;
+      // Build URL - same pattern as form data API
+      const url = `${this.config.baseUrl}/${identifier}?hash=${this.config.hash}`;
 
-      const requestBody = {
-        registrationNumber: dto.registrationNumber || '',
-        rollCode: dto.rollCode || '',
-        rollNumber: dto.rollNumber || '',
-      };
+      this.logger.log(`Fetching ${type} admit card from BSEB API: ${url}`);
 
-      this.logger.log(`Fetching ${type} admit card from BSEB API: ${identifier}`);
+      const apiResponse = await this.httpGet<any>(url);
 
-      const rawData = await this.httpPost<any>(url, requestBody);
+      // BSEB API returns { success: true, data: {...} }
+      if (!apiResponse.success || !apiResponse.data) {
+        return {
+          success: false,
+          message: apiResponse.message || 'No data returned from BSEB API',
+        };
+      }
 
-      // Transform response
-      const admitCardData = this.transformResponse(rawData);
+      // Transform response - extract admit card relevant fields
+      const admitCardData = this.transformResponse(apiResponse.data, type);
 
       // Cache the response
       await this.setInCache(cacheKey, admitCardData, this.config.cacheTtl);
@@ -102,40 +110,50 @@ export class AdmitCardService extends BsebBaseService {
   }
 
   /**
-   * Transform raw API response to normalized format
+   * Transform raw API response to normalized admit card format
+   * Maps form data API response fields to admit card format
    */
-  private transformResponse(rawData: any): AdmitCardData {
-    const studentDetails = rawData.StudentDetails || rawData.studentDetails || {};
-    const subjectDetails = rawData.SubjectDetails || rawData.subjectDetails || [];
+  private transformResponse(rawData: any, type: AdmitCardType): AdmitCardData {
+    // Extract subjects from the form data format
+    const subjects = rawData.subjects || {};
+    const subjectList: any[] = [];
+
+    // Convert subjects object to array format
+    const subjectKeys = ['mil', 'sil', 'compulsory_1', 'compulsory_2', 'compulsory_3', 'compulsory_4', 'optional', 'vocational'];
+    for (const key of subjectKeys) {
+      if (subjects[key] && subjects[key].name) {
+        subjectList.push({
+          subjectName: subjects[key].name,
+          subjectCode: subjects[key].code || '',
+          subjectGroup: key.replace('_', ' '),
+          examDate: '', // Not available in form data API
+          examTime: '', // Not available in form data API
+          examShift: '', // Not available in form data API
+        });
+      }
+    }
 
     return {
       studentDetails: {
-        studentName: this.getFieldValue(studentDetails, 'StudentName', 'studentName'),
-        fatherName: this.getFieldValue(studentDetails, 'FatherName', 'fatherName'),
-        motherName: this.getFieldValue(studentDetails, 'MotherName', 'motherName'),
-        dateOfBirth: this.getFieldValue(studentDetails, 'DateOfBirth', 'dateOfBirth'),
-        gender: this.getFieldValue(studentDetails, 'Gender', 'gender'),
-        registrationNumber: this.getFieldValue(studentDetails, 'RegistrationNumber', 'registrationNumber'),
-        rollCode: this.getFieldValue(studentDetails, 'Rollcode', 'RollCode', 'rollcode', 'rollCode'),
-        rollNumber: this.getFieldValue(studentDetails, 'RollNumber', 'rollNumber'),
-        schoolName: this.getFieldValue(studentDetails, 'SchoolName', 'schoolName'),
-        schoolCode: this.getFieldValue(studentDetails, 'SchoolCode', 'schoolCode'),
-        casteCategory: this.getFieldValue(studentDetails, 'casteCategory', 'CasteCategory'),
-        religion: this.getFieldValue(studentDetails, 'Religion', 'religion'),
-        examType: this.getFieldValue(studentDetails, 'ExamType', 'examType'),
-        examCenterName: this.getFieldValue(studentDetails, 'ExamCenterName', 'examCenterName'),
-        examCenterCode: this.getFieldValue(studentDetails, 'ExamCenterCode', 'examCenterCode'),
+        studentName: rawData.name || '',
+        fatherName: rawData.father_name || '',
+        motherName: rawData.mother_name || '',
+        dateOfBirth: rawData.dob || '',
+        gender: rawData.gender || '',
+        registrationNumber: rawData.reg_no || '',
+        rollCode: rawData.roll_code || '',
+        rollNumber: rawData.roll_no || '',
+        schoolName: rawData.school_name || '',
+        schoolCode: rawData.school_code || '',
+        casteCategory: rawData.category || '',
+        religion: rawData.religion || '',
+        examType: type === AdmitCardType.THEORY ? 'Theory' : 'Practical',
+        examCenterName: rawData.exam_center_name || rawData.school_name || '',
+        examCenterCode: rawData.exam_center_code || rawData.school_code || '',
       },
-      subjectDetails: Array.isArray(subjectDetails)
-        ? subjectDetails.map((s: any) => ({
-            subjectName: this.getFieldValue(s, 'SubjectName', 'subjectName'),
-            subjectCode: this.getFieldValue(s, 'SubjectCode', 'subjectCode'),
-            subjectGroup: this.getFieldValue(s, 'SubjectGroup', 'subjectGroup'),
-            examDate: this.getFieldValue(s, 'ExamDate', 'examDate'),
-            examTime: this.getFieldValue(s, 'ExamTime', 'examTime'),
-            examShift: this.getFieldValue(s, 'ExamShift', 'examShift'),
-          }))
-        : [],
+      subjectDetails: subjectList,
+      // Include photo URL for admit card display
+      photoUrl: rawData.photo || '',
     };
   }
 }

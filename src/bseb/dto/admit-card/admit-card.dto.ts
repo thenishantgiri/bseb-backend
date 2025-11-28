@@ -41,6 +41,7 @@ export class AdmitCardSubjectDetails extends BsebSubjectInfo {
 export class AdmitCardData {
   studentDetails: AdmitCardStudentDetails;
   subjectDetails: AdmitCardSubjectDetails[];
+  photoUrl?: string;
 }
 
 export class AdmitCardResponseDto extends BsebBaseResponse<AdmitCardData> {}
