@@ -9,6 +9,7 @@ import { ProfileModule } from './profile/profile.module';
 import { MinioModule } from './minio/minio.module';
 import { RedisModule } from './redis/redis.module';
 import { ThrottlerConfigModule } from './common/throttler.module';
+import { BsebModule } from './bseb/bseb.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ThrottlerConfigModule } from './common/throttler.module';
     MinioModule,
     AuthModule,
     ProfileModule,
+    BsebModule,
   ],
   controllers: [AppController],
   providers: [
